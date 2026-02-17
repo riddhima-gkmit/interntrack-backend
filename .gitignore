@@ -9,5 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
+# Environment / secrets (keep local)
+.env
+
+# OS files
+.DS_Store
+
 # Local scripts (not versioned)
 scripts/
