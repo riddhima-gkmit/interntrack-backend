@@ -22,20 +22,12 @@ async def create_invitation(
     created_by_id: UUID,
     background_tasks: BackgroundTasks | None = None,
 ) -> dict:
-    """Create invitation and send email. Reject if pending invite or existing user with same email in tenant."""
-    existing = await invitation_crud.get_invitation_by_email_tenant(
-        db, data.email, tenant_id
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation already sent to this email for this organization",
-        )
+    """Create invitation and send email. Reject only if user already exists in tenant; multiple invites to same email are allowed."""
     existing_user = await user_crud.get_user_by_email_ci(db, data.email, tenant_id)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email already exists in this organization",
+            detail="User with this email already exists.",
         )
     inv = await invitation_crud.create_invitation(
         db,

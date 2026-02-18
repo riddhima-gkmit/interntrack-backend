@@ -2,26 +2,24 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.messages import MENTOR_TENANT_API_MESSAGE
 from app.database.init_db import get_db
 from app.dependencies.permissions import (
     require_super_admin_for_tenant_apis,
     require_tenant_admin_or_super_for_tenant_apis,
 )
-from app.dependencies.user import get_current_user_optional
-from app.enums import UserRole
+from app.dependencies.rate_limit import rate_limit_public
 from app.models import User
 from app.schemas.tenant import (
     TenantCreateSchema,
     TenantRegisterSchema,
     TenantUpdateSchema,
 )
-from app.services import dashboard_service, tenant_service
+from app.services import tenant_service
 
-# /register uses optional auth (unauthenticated can self-register); other routes use require_super_admin or require_tenant_admin_or_super.
+# /register is public (no auth); other routes use require_super_admin or require_tenant_admin_or_super.
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
@@ -33,15 +31,9 @@ async def tenant_register(
     data: TenantRegisterSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_optional),
+    _: None = Depends(rate_limit_public),
 ):
-    """Tenant self-registration. Unauthenticated allowed. Authenticated mentors get 403 Forbidden."""
-    # Block MENTOR from creating a new tenant (policy: only SUPER_ADMIN or unauthenticated can register a tenant).
-    if current_user is not None and current_user.role == UserRole.MENTOR:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=MENTOR_TENANT_API_MESSAGE,
-        )
+    """Tenant self-registration. Public: anyone can register a new organization (tenant + first user as TENANT_ADMIN)."""
     return await tenant_service.register_tenant(
         db, data, background_tasks=background_tasks
     )
@@ -58,15 +50,6 @@ async def create_tenant(
 ):
     """Create tenant (SUPER_ADMIN only). Mentors cannot access."""
     return await tenant_service.create_tenant(db, data)
-
-
-@router.get("/dashboard/stats")
-async def get_tenants_dashboard_stats(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_admin_for_tenant_apis),
-):
-    """Super-admin only: platform tenant stats (total tenants, soft-deleted count/list, tenant list summary with user and tenant_admin counts)."""
-    return await dashboard_service.get_superadmin_tenant_stats(db)
 
 
 @router.get("/")

@@ -9,6 +9,7 @@ from app.crud import user_crud
 from app.dependencies.tenant import verify_tenant_access
 from app.enums import UserRole
 from app.models import User
+from app.schemas.tenant import TenantResponseSchema
 from app.schemas.user import (
     ChangePasswordSchema,
     UserCreateSchema,
@@ -151,8 +152,8 @@ async def list_users(
 
 
 async def get_user_by_id(db: AsyncSession, user_id: UUID, current_user: User) -> dict:
-    """Get user by id. 404 if not found or _can_access_user false (don't leak existence)."""
-    user = await user_crud.get_user(db, user_id)
+    """Get user by id with full tenant object. 404 if not found or _can_access_user false (don't leak existence)."""
+    user = await user_crud.get_user_with_tenant(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -161,9 +162,14 @@ async def get_user_by_id(db: AsyncSession, user_id: UUID, current_user: User) ->
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    return success_response(
-        UserResponseSchema.model_validate(user).model_dump(mode="json")
+    data = UserResponseSchema.model_validate(user).model_dump(mode="json")
+    data.pop("tenant_id", None)
+    data["tenant"] = (
+        TenantResponseSchema.model_validate(user.tenant).model_dump(mode="json")
+        if user.tenant
+        else None
     )
+    return success_response(data)
 
 
 async def create_user(
@@ -171,20 +177,21 @@ async def create_user(
     data: UserCreateSchema,
     current_user: User,
     background_tasks: BackgroundTasks | None = None,
+    tenant_id_from_header: UUID | None = None,
 ) -> dict:
-    """Create user. TENANT_ADMIN: tenant from JWT, role MENTOR/INTERN. SUPER_ADMIN: tenant_id in body, role TENANT_ADMIN only. Email/username unique within tenant. Sends verify OTP after commit."""
+    """Create user. TENANT_ADMIN: tenant from JWT, role MENTOR/INTERN. SUPER_ADMIN: X-Tenant-ID header required, role TENANT_ADMIN only. Email/username unique within tenant. Sends verify OTP after commit."""
     if current_user.role == UserRole.SUPER_ADMIN:
         if data.role != UserRole.TENANT_ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Super admin can only create tenant admins",
             )
-        if not data.tenant_id:
+        if not tenant_id_from_header:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="tenant_id required when creating tenant admin",
+                detail="X-Tenant-ID or tenant_id header required when creating tenant admin",
             )
-        tenant_id = data.tenant_id
+        tenant_id = tenant_id_from_header
     else:
         if current_user.tenant_id is None:
             raise HTTPException(
@@ -196,11 +203,6 @@ async def create_user(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Can only create Mentor or Intern",
-            )
-        if data.tenant_id is not None and data.tenant_id != tenant_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot create user in another tenant",
             )
 
     # Email and username unique within tenant (not globally; same email can exist in another tenant).

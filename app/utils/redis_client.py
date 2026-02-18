@@ -58,6 +58,21 @@ class RedisClient:
         client = cls.get_client()
         return await client.ttl(key)
 
+    @classmethod
+    async def rate_limit_check(
+        cls, key: str, window_sec: int, max_requests: int
+    ) -> bool:
+        """
+        Fixed-window rate limit: increment counter for key, set expiry on first hit.
+        Returns True if request is allowed (count <= max_requests), False if rate limited.
+        """
+        client = cls.get_client()
+        count = await client.incr(key)
+        ttl = await client.ttl(key)
+        if ttl == -1:
+            await client.expire(key, window_sec)
+        return count <= max_requests
+
 
 # Single instance for dependency injection and consistent access (uses class singleton under the hood).
 redis_client = RedisClient()

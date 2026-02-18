@@ -83,36 +83,3 @@ async def get_current_user(
             detail="Please verify your email address before accessing this resource.",
         )
     return user
-
-
-async def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: AsyncSession = Depends(get_db),
-) -> User | None:
-    """Return current user if valid access token present; otherwise None. Never raises 401 (e.g. for tenant register)."""
-    if not credentials:
-        return None
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-            options={"verify_exp": True},
-        )
-    except JWTError:
-        return None
-    if payload.get("type") != "access":
-        return None
-    sub = payload.get("sub")
-    if not sub:
-        return None
-    try:
-        user_id = UUID(sub)
-    except ValueError:
-        return None
-    user = await user_crud.get_user(db, user_id)
-    # Same as get_current_user: must exist, be active, and verified; otherwise treat as no user.
-    if not user or not user.is_active or not user.is_verified:
-        return None
-    return user

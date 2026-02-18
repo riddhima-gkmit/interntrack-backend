@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.messages import USER_CANNOT_UPDATE_SELF, USER_USE_ME_ENDPOINT
@@ -106,29 +106,47 @@ async def get_user(
     current_user: User = Depends(get_current_user),
 ):
     """Get user by ID. Service returns 404 if user not in scope. INTERN must use GET /me/ instead."""
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=USER_USE_ME_ENDPOINT,
+        )
     if current_user.role == UserRole.INTERN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=USER_USE_ME_ENDPOINT,
+            detail="You do not have permission to perform this action.",
         )
     return await user_service.get_user_by_id(db, user_id, current_user)
 
 
+def _get_tenant_id_from_headers(request: Request) -> UUID | None:
+    """Tenant ID from header: accept either X-Tenant-ID or tenant_id."""
+    raw = request.headers.get("X-Tenant-ID") or request.headers.get("tenant_id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw.strip())
+    except (ValueError, TypeError):
+        return None
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user(
+    request: Request,
     data: UserCreateSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create user (TENANT_ADMIN: Mentor/Intern in own tenant; SUPER_ADMIN: any tenant). Service sends verification email."""
+    """Create user (TENANT_ADMIN: Mentor/Intern in own tenant; SUPER_ADMIN: pass X-Tenant-ID or tenant_id header). Service sends verification email."""
     if current_user.role not in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action.",
         )
+    tenant_id_from_header = _get_tenant_id_from_headers(request)
     return await user_service.create_user(
-        db, data, current_user, background_tasks=background_tasks
+        db, data, current_user, background_tasks=background_tasks, tenant_id_from_header=tenant_id_from_header
     )
 
 
@@ -142,7 +160,7 @@ async def update_user(
     """Update user (scope check). Cannot update own profile via this endpoint—use PATCH /me/."""
     if user_id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=USER_CANNOT_UPDATE_SELF,
         )
     if current_user.role == UserRole.INTERN:

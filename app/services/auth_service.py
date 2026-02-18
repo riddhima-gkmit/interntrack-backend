@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.constants.auth_ttl import OTP_COOLDOWN, RESEND_WAIT_SECONDS
 from app.constants.messages import (
+    AUTH_ADMIN_DEACTIVATED,
     AUTH_INACTIVE,
     AUTH_INVALID_CREDENTIALS,
     AUTH_UNVERIFIED,
@@ -63,9 +64,6 @@ async def register_user(
     existing_username = await user_crud.get_user_by_username_ci_include_deleted(
         db, data.username, tenant_id
     )
-    admin_deactivated_msg = (
-        "This account was deleted by an admin. Please contact your admin."
-    )
 
     if existing_email and existing_email.deleted_at is None:
         if existing_username and existing_username.deleted_at is None:
@@ -81,7 +79,7 @@ async def register_user(
         if not _is_self_deleted(existing_email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=admin_deactivated_msg,
+                detail=AUTH_ADMIN_DEACTIVATED,
             )
         if existing_username and existing_username.id != existing_email.id:
             if existing_username.deleted_at is None:
@@ -92,7 +90,7 @@ async def register_user(
             if not _is_self_deleted(existing_username):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=admin_deactivated_msg,
+                    detail=AUTH_ADMIN_DEACTIVATED,
                 )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -107,7 +105,7 @@ async def register_user(
         if not _is_self_deleted(existing_username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=admin_deactivated_msg,
+                detail=AUTH_ADMIN_DEACTIVATED,
             )
         if existing_email is None or existing_email.id != existing_username.id:
             raise HTTPException(
@@ -133,9 +131,7 @@ async def register_user(
             role=UserRole.INTERN,
             tenant_id=tenant_id,
             is_verified=False,
-            is_active=False,
-            deleted_at=None,
-            deleted_by=None,
+            is_active=False
         )
         if not user:
             raise HTTPException(
@@ -428,7 +424,7 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> dict:
             detail="Invalid token type",
         )
     jti = payload.get("jti")
-    sub = payload.get("sub")
+    sub = payload.get("sub") # sub holds the user id
     if not sub:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
