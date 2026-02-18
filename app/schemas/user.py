@@ -1,4 +1,4 @@
-"""User schemas: response (with tenant), create, update, me-update, change-password. Used by user routes and invitation accept flow."""
+"""User schemas: response (with tenant_id), create, update, me-update, change-password. Used by user routes and invitation accept flow."""
 
 from datetime import datetime
 from uuid import UUID
@@ -6,15 +6,14 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.enums import UserRole
-from app.schemas.tenant import TenantResponseSchema
 from app.utils.validators import first_name_not_empty, password_strength
 
 
 class UserResponseSchema(BaseModel):
-    """User in API responses. Never include hashed_password. tenant is None for SUPER_ADMIN; from_attributes for ORM."""
+    """User in API responses. Never include hashed_password. tenant_id is None for SUPER_ADMIN; from_attributes for ORM."""
 
     id: UUID
-    tenant: TenantResponseSchema | None = None  # None when user.tenant_id is None (SUPER_ADMIN).
+    tenant_id: UUID | None = None  # None when user.tenant_id is None (SUPER_ADMIN).
     username: str
     email: str
     first_name: str
@@ -64,7 +63,7 @@ class ChangePasswordSchema(BaseModel):
 
 
 class UserCreateSchema(BaseModel):
-    """Create user (TENANT_ADMIN: tenant from JWT; SUPER_ADMIN: tenant_id required for tenant admin)."""
+    """Create user (TENANT_ADMIN: tenant from JWT; SUPER_ADMIN: pass tenant via X-Tenant-ID header)."""
 
     username: str
     email: EmailStr
@@ -73,7 +72,6 @@ class UserCreateSchema(BaseModel):
     password: str
     confirm_password: str
     role: UserRole
-    tenant_id: UUID | None = None  # Only for SUPER_ADMIN when creating TENANT_ADMIN
 
     @field_validator("first_name")
     @classmethod

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Rate limiting (public endpoints)
+    RATE_LIMIT_ENABLED: bool
+
     # Load from .env; keys are case-sensitive (e.g. DATABASE_URL not database_url).
     model_config = SettingsConfigDict(
         env_file=".env",

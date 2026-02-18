@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.enums import UserRole
 from app.models import Comment, Invitation, Leave, Task, User
@@ -14,6 +15,16 @@ async def get_user(db: AsyncSession, user_id: UUID) -> User | None:
     """Get user by id; excludes soft-deleted. Use get_user_include_deleted for restore flow."""
     result = await db.execute(
         select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_user_with_tenant(db: AsyncSession, user_id: UUID) -> User | None:
+    """Get user by id with tenant loaded (for GET /users/{id}/ response). Excludes soft-deleted."""
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.tenant))
+        .where(User.id == user_id, User.deleted_at.is_(None))
     )
     return result.scalar_one_or_none()
 

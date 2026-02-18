@@ -73,6 +73,6 @@ api_v1.include_router(tenants.router)
 api_v1.include_router(users.router)
 api_v1.include_router(tasks.router)
 api_v1.include_router(comments.router, prefix="/tasks")  # e.g. /api/v1/tasks/{task_id}/comments/
-api_v1.include_router(dashboard.router, prefix="/users")  # e.g. /api/v1/users/{user_id}/dashboard/
+api_v1.include_router(dashboard.router)  # /api/v1/users/{user_id}/dashboard/stats, /api/v1/tenants/dashboard/stats
 api_v1.include_router(leaves.router)
 app.include_router(api_v1)

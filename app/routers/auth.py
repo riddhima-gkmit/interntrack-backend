@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import tenant_crud
 from app.database.init_db import get_db
+from app.dependencies.rate_limit import rate_limit_public
 from app.dependencies.user import get_current_user
 from app.models import User
 from app.schemas.auth import (
@@ -35,6 +36,7 @@ async def register(
     data: RegisterSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Self signup (INTERN) for the given tenant. Tenant must exist and be active."""
     tenant = await tenant_crud.get_tenant(db, tenant_id)
@@ -62,6 +64,7 @@ async def register_with_invite(
     data: InviteRegisterSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Complete registration using invitation token (email from invite)."""
     from app.services import invitation_service  # Lazy import to avoid circular imports.
@@ -84,6 +87,7 @@ async def register_with_invite(
 async def verify_email(
     data: VerifyEmailSchema,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Verify email with OTP."""
     return await auth_service.verify_email(db, data)
@@ -97,6 +101,7 @@ async def resend_verification(
     data: ResendVerificationSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Resend verification OTP."""
     # tenant_id=None: email is globally unique; service resolves tenant from user if needed for OTP key.
@@ -112,6 +117,7 @@ async def resend_verification(
 async def login_with_password(
     data: LoginSchema,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Login with email and password. Returns access and refresh tokens."""
     return await auth_service.login_with_password(db, data)
@@ -125,6 +131,7 @@ async def login(
     data: LoginSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Step 1: Validate email+password, send login OTP."""
     return await auth_service.login_otp_init(
@@ -139,6 +146,7 @@ async def login(
 async def login_verify_otp(
     data: VerifyLoginOTPSchema,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Step 2: Verify OTP and return access + refresh tokens."""
     return await auth_service.login_otp_verify(db, data)
@@ -152,6 +160,7 @@ async def forgot_password(
     data: ForgotPasswordSchema,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Request password reset OTP."""
     # tenant_id=None: email is globally unique; service looks up user and may use tenant for OTP key.
@@ -167,6 +176,7 @@ async def forgot_password(
 async def forgot_password_confirm(
     data: ForgotPasswordConfirmSchema,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Confirm reset with OTP and new password."""
     return await auth_service.forgot_password_confirm(db, data)
@@ -179,6 +189,7 @@ async def forgot_password_confirm(
 async def refresh(
     data: RefreshSchema,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_public),
 ):
     """Refresh access token; old refresh token is blacklisted. No auth header required—only refresh token in body."""
     return await auth_service.refresh_tokens(db, data.refresh)

@@ -8,25 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Tenant
 
 
-async def get_tenant(
-    db: AsyncSession, tenant_id: UUID, include_deleted: bool = False
-) -> Tenant | None:
-    """Get tenant by id. Excludes soft-deleted unless include_deleted (e.g. for admin or audit)."""
-    q = select(Tenant).where(Tenant.id == tenant_id)
-    if not include_deleted:
-        q = q.where(Tenant.deleted_at.is_(None))
-    result = await db.execute(q)
+async def get_tenant(db: AsyncSession, tenant_id: UUID) -> Tenant | None:
+    """Get tenant by id. Excludes soft-deleted."""
+    result = await db.execute(
+        select(Tenant).where(
+            Tenant.id == tenant_id,
+            Tenant.deleted_at.is_(None),
+        )
+    )
     return result.scalar_one_or_none()
 
 
-async def get_tenant_by_name(
-    db: AsyncSession, name: str, include_deleted: bool = False
-) -> Tenant | None:
-    """Get tenant by name (for uniqueness check or lookup). Caller should pass trimmed name; excludes soft-deleted unless include_deleted."""
-    q = select(Tenant).where(Tenant.name == name)
-    if not include_deleted:
-        q = q.where(Tenant.deleted_at.is_(None))
-    result = await db.execute(q)
+async def get_tenant_by_name(db: AsyncSession, name: str) -> Tenant | None:
+    """Get tenant by name (for uniqueness check or lookup). Caller should pass trimmed name. Excludes soft-deleted."""
+    result = await db.execute(
+        select(Tenant).where(
+            Tenant.name == name,
+            Tenant.deleted_at.is_(None),
+        )
+    )
     return result.scalar_one_or_none()
 
 
@@ -35,14 +35,13 @@ async def get_tenants(
     skip: int = 0,
     limit: int = 10,
     is_active: bool | None = None,
-    include_deleted: bool = False,
     only_deleted: bool = False,
 ) -> list[Tenant]:
-    """List tenants (newest first, paginated). only_deleted=True returns only soft-deleted; otherwise optional is_active and include_deleted."""
+    """List tenants (newest first, paginated). only_deleted=True returns only soft-deleted; otherwise excludes soft-deleted and optional is_active."""
     q = select(Tenant).order_by(Tenant.created_at.desc())
     if only_deleted:
         q = q.where(Tenant.deleted_at.isnot(None))
-    elif not include_deleted:
+    else:
         q = q.where(Tenant.deleted_at.is_(None))
     if is_active is not None and not only_deleted:
         q = q.where(Tenant.is_active.is_(is_active))

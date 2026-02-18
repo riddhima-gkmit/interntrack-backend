@@ -135,13 +135,13 @@ async def get_superadmin_tenant_stats(db: AsyncSession) -> dict:
         db, skip=0, limit=50, only_deleted=True
     )
     tenants = await tenant_crud.get_tenants(
-        db, skip=0, limit=500, include_deleted=False
+        db, skip=0, limit=500
     )
     tenant_ids = [t.id for t in tenants]
     if not tenant_ids:
         return success_response({
             "total_tenants": 0,
-            "soft_deleted_tenants": {"count": soft_deleted_count, "list": _serialize_tenant_list(soft_deleted_list)},
+            "deleted_tenants": {"count": soft_deleted_count, "list": _serialize_tenant_list(soft_deleted_list)},
             "tenant_list_summary": [],
         })
     # Per-tenant user counts (non-deleted users) and tenant_admin counts in two queries to avoid N+1.
@@ -160,7 +160,7 @@ async def get_superadmin_tenant_stats(db: AsyncSession) -> dict:
     ]
     return success_response({
         "total_tenants": total_tenants,
-        "soft_deleted_tenants": {
+        "deleted_tenants": {
             "count": soft_deleted_count,
             "list": _serialize_tenant_list(soft_deleted_list),
         },
